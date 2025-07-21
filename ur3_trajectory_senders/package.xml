@@ -2,20 +2,23 @@
 <package format="3">
   <name>ur3_trajectory_senders</name>
   <version>0.0.1</version>
-  <description>UR3 trajectory demo: capture, interpolate, and execute.</description>
+  <description>UR3 trajectory demo: capture, fit sphere, sample views, and execute.</description>
   <maintainer email="aleksantari@gmail.com">santari</maintainer>
   <license>MIT</license>
 
+  <!-- Buildtool -->
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>eigen3_cmake_module</buildtool_depend>
 
-  <!-- Node & service dependencies -->
+  <!-- Core runtime dependencies -->
   <depend>rclcpp</depend>
   <depend>std_srvs</depend>
   <depend>geometry_msgs</depend>
   <depend>tf2_ros</depend>
   <depend>tf2_geometry_msgs</depend>
+  <depend>Eigen3</depend>
 
-  <!-- Trajectory & action dependencies -->
+  <!-- Trajectory & action -->
   <depend>trajectory_msgs</depend>
   <depend>control_msgs</depend>
   <depend>rclcpp_action</depend>

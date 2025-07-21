@@ -1,77 +1,80 @@
-// src/capture_interpolate_node.cpp
-
 #include "ur3_trajectory_senders/pose_utils.hpp"
+#include "ur3_trajectory_senders/interpolation_utils.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <std_srvs/srv/trigger.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
 #include <vector>
 
+using std::placeholders::_1; using std::placeholders::_2;
 using namespace ur3_trajectory_senders;
-using std::placeholders::_1;
-using std::placeholders::_2;
 
-class PoseCaptureNode : public rclcpp::Node
+class CaptureInterpolateNode : public rclcpp::Node
 {
 public:
-  PoseCaptureNode()
-  : Node("pose_capture_node")
+  CaptureInterpolateNode() : Node("capture_interpolate_node")
   {
-    // --- Parameters for frame names ---
-    this->declare_parameter<std::string>("base_frame", "base_link");
-    this->declare_parameter<std::string>("tcp_frame",  "tool0");
+    declare_parameter<std::string>("base_frame", "base_link");
+    declare_parameter<std::string>("tcp_frame",  "tool0");
+    declare_parameter<int>("samples", 100);
 
-    auto base_frame = this->get_parameter("base_frame").as_string();
-    auto tcp_frame  = this->get_parameter("tcp_frame").as_string();
+    pose_utils_ = std::make_unique<PoseUtils>(
+      this,
+      get_parameter("base_frame").as_string(),
+      get_parameter("tcp_frame").as_string());
 
-    // --- Initialize PoseUtils with raw Node* ---
-    pose_utils_ = std::make_unique<ur3_trajectory_senders::PoseUtils>(
-      this, base_frame, tcp_frame);
+    cap_srv_ = create_service<std_srvs::srv::Trigger>(
+      "capture_pose", std::bind(&CaptureInterpolateNode::onCapture, this, _1, _2));
 
-    // --- Expose a Trigger service ---
-    capture_srv_ = this->create_service<std_srvs::srv::Trigger>(
-      "capture_pose",
-      std::bind(&PoseCaptureNode::captureCallback, this, _1, _2));
+    comp_srv_ = create_service<std_srvs::srv::Trigger>(
+      "compute_views", std::bind(&CaptureInterpolateNode::onCompute, this, _1, _2));
 
-    RCLCPP_INFO(get_logger(),
-      "PoseCaptureNode ready. Call:\n"
-      "  ros2 service call /capture_pose std_srvs/srv/Trigger\n"
-      "to capture the current TCP pose.");
+    pub_ = create_publisher<geometry_msgs::msg::PoseArray>("/interpolated_poses", 10);
+
+    RCLCPP_INFO(get_logger(), "CaptureInterpolateNode ready.");
   }
 
 private:
-  void captureCallback(
-    const std::shared_ptr<std_srvs::srv::Trigger::Request> /*req*/,
-    std::shared_ptr<std_srvs::srv::Trigger::Response>      res)
+  /* ---- capture ---- */
+  void onCapture(std::shared_ptr<std_srvs::srv::Trigger::Request> /*req*/,
+                 std::shared_ptr<std_srvs::srv::Trigger::Response> res)
   {
-    // Query the latest TCP pose via TF2
-    auto stamped_pose = pose_utils_->getCurrentTCP();
-
-    // Store it for later interpolation
-    captured_poses_.push_back(stamped_pose);
-
-    // Log the result
-    const auto &p = stamped_pose.pose.position;
-    RCLCPP_INFO(get_logger(),
-      "Captured pose [%zu]  frame='%s'  time=%.3f  x=%.3f  y=%.3f  z=%.3f",
-      captured_poses_.size(),
-      stamped_pose.header.frame_id.c_str(),
-      stamped_pose.header.stamp.sec +
-        stamped_pose.header.stamp.nanosec * 1e-9,
-      p.x, p.y, p.z);
-
+    auto pose = pose_utils_->getCurrentTCP();
+    poses_.push_back(pose);
     res->success = true;
-    res->message = "Pose captured successfully";
+    res->message = "Pose captured (" + std::to_string(poses_.size()) + ")";
   }
 
-  std::unique_ptr<PoseUtils>                             pose_utils_;
-  std::vector<geometry_msgs::msg::PoseStamped>           captured_poses_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr     capture_srv_;
+  /* ---- compute sphere & sample ---- */
+  void onCompute(std::shared_ptr<std_srvs::srv::Trigger::Request> /*req*/,
+                 std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+  {
+    Eigen::Vector3d centre; double radius;
+    if (poses_.size() < 4 || !fitSphereLS(poses_, centre, radius)) {
+      res->success = false; res->message = "Need ≥4 poses to fit sphere"; return;
+    }
+
+    const int M = this->get_parameter("samples").as_int();
+    auto samples = sampleSphere(centre, radius, poses_.front().header.frame_id, get_clock(), M);
+
+    geometry_msgs::msg::PoseArray msg;
+    msg.header.frame_id = poses_.front().header.frame_id;
+    msg.header.stamp = now();
+    for(auto& p: samples) msg.poses.push_back(p.pose);
+    pub_->publish(msg);
+
+    res->success = true;
+    res->message = "Published " + std::to_string(samples.size()) + " poses on sphere";
+  }
+
+  std::unique_ptr<PoseUtils> pose_utils_;
+  std::vector<geometry_msgs::msg::PoseStamped> poses_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr cap_srv_, comp_srv_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pub_;
 };
 
-int main(int argc, char **argv)
-{
-  rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<PoseCaptureNode>());
+int main(int argc,char** argv){
+  rclcpp::init(argc,argv);
+  rclcpp::spin(std::make_shared<CaptureInterpolateNode>());
   rclcpp::shutdown();
   return 0;
 }
