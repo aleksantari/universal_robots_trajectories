@@ -10,11 +10,12 @@
 using FollowJointTrajectory = control_msgs::action::FollowJointTrajectory;
 using GoalHandle = rclcpp_action::ClientGoalHandle<FollowJointTrajectory>;
 
-class TrajectoryActionClient : public rclcpp::Node {
+class TrajectoryActionClient : public rclcpp::Node
+{
 public:
-
   TrajectoryActionClient()
-  : Node("action_trajectory_client") {
+  : Node("action_trajectory_client")
+  {
     //creating an action client with action type and action server name
     client_ = rclcpp_action::create_client<FollowJointTrajectory>(
       this, "/joint_trajectory_controller/follow_joint_trajectory");
@@ -43,18 +44,19 @@ public:
     // send the goal asychronously
     // there is a 2 callbacks: for goal accept/rejected, for when result arrives
     auto send_goal_options = rclcpp_action::Client<FollowJointTrajectory>::SendGoalOptions();
-    send_goal_options.goal_response_callback = 
+    send_goal_options.goal_response_callback =
       std::bind(&TrajectoryActionClient::goal_response_callback, this, std::placeholders::_1);
-    send_goal_options.result_callback = 
+    send_goal_options.result_callback =
       std::bind(&TrajectoryActionClient::result_callback, this, std::placeholders::_1);
-    
+
     client_->async_send_goal(goal_msg, send_goal_options);
   }
 
 private:
   rclcpp_action::Client<FollowJointTrajectory>::SharedPtr client_;
 
-  void goal_response_callback(GoalHandle::SharedPtr handle) {
+  void goal_response_callback(GoalHandle::SharedPtr handle)
+  {
     if (!handle) {
       RCLCPP_ERROR(this->get_logger(), "Goal rejected");
     } else {
@@ -62,13 +64,17 @@ private:
     }
   }
 
-  void result_callback(const GoalHandle::WrappedResult & result) {
-    RCLCPP_INFO(this->get_logger(), "Trajectory result received: %d", static_cast<int>(result.code));
+  void result_callback(const GoalHandle::WrappedResult & result)
+  {
+    RCLCPP_INFO(
+      this->get_logger(), "Trajectory result received: %d",
+      static_cast<int>(result.code));
     rclcpp::shutdown();
   }
 };
 
-int main(int argc, char ** argv) {
+int main(int argc, char ** argv)
+{
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<TrajectoryActionClient>());
   return 0;
