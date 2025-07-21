@@ -8,16 +8,19 @@ endif()
 # dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(std_srvs REQUIRED)              # for Trigger
+find_package(geometry_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
+
 find_package(trajectory_msgs REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(builtin_interfaces REQUIRED)
-find_package(tf2_ros REQUIRED)
-find_package(tf2_geometry_msgs REQUIRED)
-find_package(geometry_msgs REQUIRED)
+
 find_package(ament_cmake_gtest REQUIRED)
 
-# pose_utils library
+# --- pose_utils library ---
 add_library(pose_utils src/pose_utils.cpp)
 target_include_directories(pose_utils PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -29,7 +32,7 @@ ament_target_dependencies(pose_utils
   geometry_msgs
 )
 
-# executable using pose_utils
+# --- executable: trajectory action client ---
 add_executable(send_trajectory_action src/send_trajectory_action.cpp)
 target_link_libraries(send_trajectory_action pose_utils)
 ament_target_dependencies(send_trajectory_action
@@ -40,16 +43,26 @@ ament_target_dependencies(send_trajectory_action
   builtin_interfaces
 )
 
-# install targets
+# --- executable: capture (and later interpolate) node ---
+add_executable(capture_interpolate_node src/capture_interpolate_node.cpp)
+target_link_libraries(capture_interpolate_node pose_utils)
+ament_target_dependencies(capture_interpolate_node
+  rclcpp
+  std_srvs
+  geometry_msgs
+)
+
+# --- install targets ---
 install(TARGETS
-  send_trajectory_action
   pose_utils
+  send_trajectory_action
+  capture_interpolate_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
 # install include headers
 install(DIRECTORY include/
-  DESTINATION include/
+  DESTINATION include/${PROJECT_NAME}
 )
 
 # =============================

@@ -12,9 +12,9 @@ PoseUtils::PoseUtils(rclcpp::Node *node,
 : node_(node), base_frame_(base_frame), tcp_frame_(tcp_frame)
 {
   // Use node's clock for TF2 timing
-  tf_buffer_ = std::make_unique<tf2_ros::Buffer>(node_->get_clock_interface());
+  tf_buffer_ = std::make_unique<tf2_ros::Buffer>(node_->get_clock());
   // Create a TransformListener to fill the buffer
-  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_, *node_);
+  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 }
 
 geometry_msgs::msg::PoseStamped PoseUtils::getCurrentTCP() const

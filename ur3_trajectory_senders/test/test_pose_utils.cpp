@@ -1,28 +1,37 @@
+// test/test_pose_utils.cpp
+
 #include <gtest/gtest.h>
 #include <rclcpp/rclcpp.hpp>
 #include "ur3_trajectory_senders/pose_utils.hpp"
 
 using namespace ur3_trajectory_senders;
 
-// test case with test group: PoseUtilsTest, test name: test_lookup_pose
+// test group: PoseUtilsTest, test name: test_lookup_pose
 TEST(PoseUtilsTest, test_lookup_pose)
 {
+  // Initialize ROS 2 (no args)
   rclcpp::init(0, nullptr);
-  // create ros2 node
+
+  // Create a node (shared_ptr owned by test framework)
   auto node = rclcpp::Node::make_shared("test_pose_utils_node");
 
-  // instance of PoseUtils class and passing in node to make constructor happy
-  // this should create a TF buffer and start Transforms listen at will fill it
-  PoseUtils pose_utils(node);
+  // Pass raw pointer to PoseUtils, per the new signature
+  PoseUtils pose_utils(node.get());
 
-  // call the utility function
+  // Call the utility function
   auto pose = pose_utils.getCurrentTCP();
 
+  // Print for visibility (optional)
   std::cout << "Pose frame ID: " << pose.header.frame_id << std::endl;
-  // This only passes if TF is active in the background
+
+  // We expect either a valid 'base_link' or an empty header if TF isn't up
   EXPECT_TRUE(pose.header.frame_id == "base_link" || pose.header.frame_id.empty());
 
-
-
   rclcpp::shutdown();
+}
+
+int main(int argc, char **argv)
+{
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }
