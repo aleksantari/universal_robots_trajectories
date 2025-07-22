@@ -20,6 +20,6 @@ sampleSphere(const Eigen::Vector3d& centre,
              double radius,
              const std::string& frame_id,
              rclcpp::Clock::SharedPtr clock,
-             int M = 100);
+             int M = 10);
 
 } // namespace

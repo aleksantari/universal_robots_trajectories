@@ -15,7 +15,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
-
+find_package(visualization_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(rclcpp_action REQUIRED)
@@ -78,6 +78,7 @@ ament_target_dependencies(capture_interpolate_node
   std_srvs
   geometry_msgs
   Eigen3
+  visualization_msgs
 )
 
 # —————————————
