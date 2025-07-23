@@ -86,14 +86,15 @@ ament_target_dependencies(capture_interpolate_node
 )
 
 # ——————————
-# Executable: IK solver node
+# Executable: IK solver queue executable 
 # ——————————
-add_executable(ik_solver_node src/ik_solver_node.cpp)
-target_link_libraries(ik_solver_node
-  interpolation_utils
+add_executable(ik_queue_executor_node src/ik_queue_executor_node.cpp)
+target_link_libraries(ik_queue_executor_node
 )
-ament_target_dependencies(ik_solver_node
+ament_target_dependencies(ik_queue_executor_node
   rclcpp
+  rclcpp_action
+  control_msgs
   std_srvs
   geometry_msgs
   trajectory_msgs
@@ -103,7 +104,7 @@ ament_target_dependencies(ik_solver_node
   tf2_geometry_msgs
   tf2_eigen
 )
-target_include_directories(ik_solver_node PUBLIC
+target_include_directories(ik_queue_executor_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 
@@ -116,7 +117,7 @@ install(TARGETS
   interpolation_utils
   send_trajectory_action
   capture_interpolate_node
-  ik_solver_node
+  ik_queue_executor_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

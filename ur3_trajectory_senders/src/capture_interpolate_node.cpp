@@ -45,7 +45,7 @@ public:
       "compute_views", std::bind(&CaptureInterpolateNode::onCompute, this, _1, _2));
 
     // PoseArray publisher for downstream IK node
-    pub_ = create_publisher<geometry_msgs::msg::PoseArray>("/interpolated_poses", 10);
+    pub_ = create_publisher<geometry_msgs::msg::PoseArray>("/desired_poses", 10);
     // RViz visualisation publisher
     marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
       "visualization_marker_array", 10);
