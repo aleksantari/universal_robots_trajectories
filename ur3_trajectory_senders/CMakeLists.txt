@@ -125,6 +125,16 @@ install(DIRECTORY include/
 )
 
 # ——————————
+# Launch
+# ——————————
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}/
+)
+
+
+
+
+# ——————————
 # Testing
 # ——————————
 if(BUILD_TESTING)
@@ -148,5 +158,6 @@ if(BUILD_TESTING)
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   )
 endif()
+
 
 ament_package()

@@ -30,6 +30,9 @@
   <depend>moveit_ros_planning_interface</depend>
 
 
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
 
   <!-- Testing -->
   <test_depend>ament_cmake_gtest</test_depend>
