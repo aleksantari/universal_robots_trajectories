@@ -1,85 +1,114 @@
 #include "ur3_trajectory_senders/interpolation_utils.hpp"
-#include <rclcpp/rclcpp.hpp>
+#include <Eigen/Geometry>
+#include <cmath>
+#include <stdexcept>
 
-namespace ur3_trajectory_senders {
+namespace ur3_trajectory_senders
+{
 
-using Pose = geometry_msgs::msg::PoseStamped; // all poses are stamped poses
+struct Circle3D
+{
+  Eigen::Vector3d center;
+  double radius;
+  Eigen::Vector3d u;
+  Eigen::Vector3d v;
+};
 
-// converts ros2 point to eigen 3d vector
-static Eigen::Vector3d toEigen(const geometry_msgs::msg::Point& p){
-  return {p.x, p.y, p.z};
+static Circle3D circleThroughThreePoints(const Eigen::Vector3d &p1,
+                                         const Eigen::Vector3d &p2,
+                                         const Eigen::Vector3d &p3)
+{
+  Eigen::Vector3d u_vec = p2 - p1;
+  Eigen::Vector3d v_vec = p3 - p1;
+  Eigen::Vector3d n = u_vec.cross(v_vec);
+  double n_norm = n.norm();
+  if (n_norm < 1e-6)
+    throw std::runtime_error("Points are colinear – circle undefined");
+
+  Eigen::Vector3d u = u_vec.normalized();
+  Eigen::Vector3d v_tmp = v_vec - v_vec.dot(u) * u;
+  Eigen::Vector3d v = v_tmp.normalized();
+
+  double d = u_vec.norm();
+  double x3 = v_vec.dot(u);
+  double y3 = v_vec.dot(v);
+
+  double denom = 2 * (x3 * 0 - y3 * d);
+  if (std::abs(denom) < 1e-8)
+    throw std::runtime_error("Degenerate circle");
+
+  double cx = ( (d*d) * y3 ) / denom;
+  double cy = ( (x3*x3 + y3*y3) * (-d) ) / denom;
+  double radius = std::sqrt(cx*cx + cy*cy);
+
+  Eigen::Vector3d center3d = p1 + cx * u + cy * v;
+  return {center3d, radius, u, v};
 }
 
-
-bool fitSphereLS(const std::vector<Pose>& samples,
-                 Eigen::Vector3d& centre,
-                 double& radius)
+static double angleOfPoint(const Eigen::Vector3d &p, const Circle3D &c)
 {
-  const size_t N = samples.size();
-  if (N < 4) return false;  // need ≥4 points for unique sphere LS fit
-
-  // set up linear system Ax = b
-  Eigen::MatrixXd A(N-1,3);
-  Eigen::VectorXd b(N-1);
-
-  
-  Eigen::Vector3d p0 = toEigen(samples[0].pose.position); // choose first point as reference
-  
-  for(size_t i=1;i<N;++i){
-    Eigen::Vector3d pi = toEigen(samples[i].pose.position);
-    A.row(i-1) = 2.0*(pi - p0);
-    b(i-1)    = pi.squaredNorm() - p0.squaredNorm();
-  }
-  centre = A.colPivHouseholderQr().solve(b);
-  radius = (p0 - centre).norm();
-  return true;
+  Eigen::Vector3d d = p - c.center;
+  double x = d.dot(c.u);
+  double y = d.dot(c.v);
+  return std::atan2(y, x);
 }
 
-std::vector<Pose> sampleSphere(const Eigen::Vector3d& centre,
-                               double radius,
-                               const std::string& frame_id,
-                               rclcpp::Clock::SharedPtr clock,
-                               int M)
+std::vector<geometry_msgs::msg::PoseStamped>
+interpolateArc(const geometry_msgs::msg::PoseStamped &start,
+               const geometry_msgs::msg::PoseStamped &mid,
+               const geometry_msgs::msg::PoseStamped &end,
+               int samples)
 {
-  // initialzie stamped pose vector and reserve space
-  std::vector<Pose> out;
-  out.reserve(M);
+  if (samples < 2) samples = 2;
 
-  const double golden = M_PI * (3.0 - std::sqrt(5.0)); // golden angle ~2.39996
-  
-  for(int k = 0; k < M; ++k) {
-    double i = k + 0.5;                // offset to avoid poles
-    double y   = 1.0 - (2.0 * i) / M;            // map k to (‑1,1)
-    double r   = std::sqrt(1 - y*y);    
-    double phi = golden * i;
+  auto toVec = [](const geometry_msgs::msg::Point &p){
+    return Eigen::Vector3d(p.x,p.y,p.z);
+  };
+  Eigen::Vector3d p1 = toVec(start.pose.position);
+  Eigen::Vector3d p2 = toVec(mid.pose.position);
+  Eigen::Vector3d p3 = toVec(end.pose.position);
 
-    Eigen::Vector3d dir(r*std::cos(phi), r*std::sin(phi), y); // unit vector pointing from center to surface point
-    Eigen::Vector3d pos = centre + radius * dir;              // final position on surface by scaling dir
+  Circle3D circ = circleThroughThreePoints(p1,p2,p3);
 
-    // orientation: Z -> centre, choose X from world +Y
-    Eigen::Vector3d z = (centre - pos).normalized();
-    Eigen::Vector3d x = z.cross(Eigen::Vector3d::UnitY());
-    
-    if (x.norm() < 1e-6) x = z.cross(Eigen::Vector3d::UnitX());
-    x.normalize();
-    Eigen::Vector3d y_vec = z.cross(x).normalized();
-    Eigen::Matrix3d R;
-    R.col(0)=x; R.col(1)=y_vec; R.col(2)=z;
-    Eigen::Quaterniond q(R);
+  double a1 = angleOfPoint(p1,circ);
+  double a3 = angleOfPoint(p3,circ);
 
-    Pose P;
-    P.header.frame_id = frame_id;
-    P.header.stamp = clock->now();
-    P.pose.position.x = pos.x();
-    P.pose.position.y = pos.y();
-    P.pose.position.z = pos.z();
-    P.pose.orientation.w = q.w();
-    P.pose.orientation.x = q.x();
-    P.pose.orientation.y = q.y();
-    P.pose.orientation.z = q.z();
-    out.push_back(P);
+  if (a3 < a1) a3 += 2*M_PI;
+  double a2 = angleOfPoint(p2,circ);
+  if (a2 < a1) a2 += 2*M_PI;
+  if (!(a1 < a2 && a2 < a3)) {
+    a3 -= 2*M_PI;
+    if (a2 < a1) a2 += 2*M_PI;
   }
+
+  Eigen::Quaterniond q1(start.pose.orientation.w, start.pose.orientation.x,
+                        start.pose.orientation.y, start.pose.orientation.z);
+  Eigen::Quaterniond q3(end.pose.orientation.w, end.pose.orientation.x,
+                        end.pose.orientation.y, end.pose.orientation.z);
+
+  std::vector<geometry_msgs::msg::PoseStamped> out;
+  out.reserve(samples);
+
+  for (int i=0;i<samples;++i) {
+    double t = static_cast<double>(i)/(samples-1);
+    double ang = (1.0 - t) * a1 + t * a3;
+    Eigen::Vector3d pos = circ.center + circ.radius * (std::cos(ang)*circ.u + std::sin(ang)*circ.v);
+
+    Eigen::Quaterniond q = q1.slerp(t, q3);
+
+    geometry_msgs::msg::PoseStamped ps;
+    ps.header = start.header;
+    ps.pose.position.x = pos.x();
+    ps.pose.position.y = pos.y();
+    ps.pose.position.z = pos.z();
+    ps.pose.orientation.x = q.x();
+    ps.pose.orientation.y = q.y();
+    ps.pose.orientation.z = q.z();
+    ps.pose.orientation.w = q.w();
+    out.push_back(ps);
+  }
+
   return out;
 }
 
-} // namespace
+} // namespace ur3_trajectory_senders

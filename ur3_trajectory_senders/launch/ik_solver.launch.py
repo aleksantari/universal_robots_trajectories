@@ -19,8 +19,8 @@ def generate_launch_description():
 
     ik_node = Node(
         package='ur3_trajectory_senders',
-        executable='ik_solver_node',
-        name='ik_solver_node',
+        executable='ik_queue_executor_node',
+        name='ik_queue_executor_node',
         output='screen',
         parameters=[LaunchConfiguration('kinematics_yaml')]
     )
